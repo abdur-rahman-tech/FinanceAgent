@@ -2,6 +2,9 @@ streamlit>=1.40.0
 crewai>=0.100.0
 litellm
 langchain-groq
+pydantic>=2.0
 python-dotenv
 pandas
+# Streamlit Cloud's system sqlite3 is too old for crewai/chromadb; this wheel fixes it (app.py swaps it in).
+pysqlite3-binary; sys_platform == "linux" and python_version < "3.13"
  
