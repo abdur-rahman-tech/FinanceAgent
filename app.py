@@ -5,22 +5,60 @@ Run:  streamlit run app.py
 from __future__ import annotations
  
 import os
+ 
+# Privacy: mortgage data must not leave the app via framework telemetry.
+os.environ.setdefault("CREWAI_DISABLE_TELEMETRY", "true")
+os.environ.setdefault("OTEL_SDK_DISABLED", "true")
+ 
+import sys
+ 
+# Streamlit Cloud ships an old sqlite3; crewai's vector-store dependency (chromadb) needs >= 3.35.
+try:
+    __import__("pysqlite3")
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except Exception:
+    pass
+ 
+import importlib.metadata as md
+import sqlite3
+import traceback
 from datetime import date, datetime, timedelta
  
 import pandas as pd
 import streamlit as st
  
-try:  # optional: Streamlit Cloud uses Secrets/env vars instead of a .env file
+st.set_page_config(page_title="Underwriting Co-Pilot", page_icon="🏦", layout="wide")  # must be first st call
+ 
+try:  # optional: Streamlit Cloud uses Secrets instead of a .env file
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover
     def load_dotenv(*args, **kwargs):
         return False
  
-from agents import REC_ALL, REC_APPROVE, REC_DENY, REC_SUSPEND, WorkflowError, run_underwriting_workflow
-from tools import PROGRAM_RULES, InputValidationError
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+try:
+    from agents import REC_ALL, REC_APPROVE, REC_DENY, REC_SUSPEND, WorkflowError, run_underwriting_workflow
+    from tools import PROGRAM_RULES, InputValidationError
+except Exception as _exc:  # Streamlit redacts tracebacks, so surface the real cause ourselves
+    st.error("The app failed to start because a module could not be imported.")
+    st.code(traceback.format_exc())
+    st.write("Files next to app.py:", sorted(os.listdir(APP_DIR)))
+    st.info("Make sure agents.py, tools.py and requirements.txt are in the same folder as app.py in your GitHub repo, "
+            "then reboot the app. See README.md.")
+    st.stop()
  
 load_dotenv()
-st.set_page_config(page_title="Underwriting Co-Pilot", page_icon="🏦", layout="wide")
+ 
+ 
+def get_secret(name: str) -> str:
+    """Streamlit Secrets first (Cloud), then environment / .env (local)."""
+    try:
+        if name in st.secrets:
+            return str(st.secrets[name])
+    except Exception:
+        pass
+    return os.getenv(name, "")
+ 
  
 ADVERSE_REASONS = [
     "Excessive obligations in relation to income",
@@ -138,7 +176,7 @@ init_state()
 with st.sidebar:
     st.header("⚙️ Configuration")
     provider = st.radio("LLM provider", ["Groq", "OpenAI"], horizontal=True)
-    env_key = os.getenv("GROQ_API_KEY" if provider == "Groq" else "OPENAI_API_KEY", "")
+    env_key = get_secret("GROQ_API_KEY" if provider == "Groq" else "OPENAI_API_KEY")
     api_key = st.text_input(f"{provider} API key", value=env_key, type="password",
                             help="Loaded from .env if present. Never stored by this app.")
     if env_key and api_key == env_key:
@@ -146,8 +184,15 @@ with st.sidebar:
     program = st.selectbox("Loan program", list(PROGRAM_RULES.keys()))
     r = PROGRAM_RULES[program]
     st.caption(f"Rules: {r['basis']}")
+    with st.expander("Environment diagnostics"):
+        for pkg in ("streamlit", "crewai", "litellm", "pydantic", "pandas", "python-dotenv"):
+            try:
+                st.write(f"✅ {pkg} {md.version(pkg)}")
+            except Exception:
+                st.write(f"❌ {pkg} not installed")
+        st.caption(f"Python {sys.version.split()[0]} · sqlite {sqlite3.sqlite_version}")
     st.divider()
-    st.button("Load sample file (demo)", on_click=load_sample, use_container_width=True)
+    st.button("Load sample file (demo)", on_click=load_sample)
     st.warning("Do not enter real borrower PII unless your LLM vendor agreement permits it.", icon="🔒")
  
 st.title("🏦 Mortgage Underwriting Co-Pilot")
@@ -168,7 +213,7 @@ with tab1:
     st.subheader("Document inventory")
     st.caption("List each document in the file with its date. Missing, outdated or undated items are flagged deterministically.")
     st.session_state.docs_current = st.data_editor(
-        st.session_state.docs_df, num_rows="dynamic", use_container_width=True,
+        st.session_state.docs_df, num_rows="dynamic",
         key=f"docs_editor_{st.session_state.docs_version}",
         column_config={"Document": st.column_config.TextColumn("Document", required=True),
                        "Date": st.column_config.DateColumn("Document date", format="YYYY-MM-DD")})
@@ -229,7 +274,7 @@ with tab2:
  
         st.subheader("Document completeness")
         st.dataframe(pd.DataFrame(res["completeness"]["items"])[["category", "label", "status", "newest_date", "detail"]],
-                     use_container_width=True, hide_index=True)
+                     hide_index=True)
  
         st.subheader("Guideline citations (RAG)")
         if not res["citations"]:
@@ -282,9 +327,9 @@ with tab3:
         st.success(f"Decision recorded: **{st.session_state.final['final_decision']}**")
     else:
         b1, b2, b3 = st.columns(3)
-        if b1.button("✅ Accept Recommendation", use_container_width=True): st.session_state.pending = "accept"
-        if b2.button("📝 Request Information / Add Conditions", use_container_width=True): st.session_state.pending = "request"
-        if b3.button("⛔ Override Decision", use_container_width=True): st.session_state.pending = "override"
+        if b1.button("✅ Accept Recommendation"): st.session_state.pending = "accept"
+        if b2.button("📝 Request Information / Add Conditions"): st.session_state.pending = "request"
+        if b3.button("⛔ Override Decision"): st.session_state.pending = "override"
  
         pending = st.session_state.pending
         default_aa = [x for x in res["adverse_action_candidates"] if x in ADVERSE_REASONS]
