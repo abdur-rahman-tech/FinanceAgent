@@ -175,9 +175,8 @@ def build_report(res: dict, final: dict, audit: list[dict]) -> str:
 init_state()
 with st.sidebar:
     st.header("⚙️ Configuration")
-    provider = st.radio("LLM provider", ["Groq", "OpenAI"], horizontal=True)
-    env_key = get_secret("GROQ_API_KEY" if provider == "Groq" else "OPENAI_API_KEY")
-    api_key = st.text_input(f"{provider} API key", value=env_key, type="password",
+    env_key = get_secret("GROQ_API_KEY")
+    api_key = st.text_input("Groq API key", value=env_key, type="password",
                             help="Loaded from .env if present. Never stored by this app.")
     if env_key and api_key == env_key:
         st.caption("Key loaded from environment.")
@@ -229,7 +228,7 @@ with tab2:
         if st.session_state.loan <= 0: problems.append("Loan amount must be greater than zero.")
         if st.session_state.value <= 0: problems.append("Property value must be greater than zero.")
         if st.session_state.notes.strip() and not api_key.strip():
-            problems.append(f"{provider} API key is missing (sidebar or .env).")
+            problems.append("Groq API key is missing (sidebar, Streamlit Secrets or .env).")
         if problems:
             for p in problems:
                 st.error(p)
@@ -237,7 +236,7 @@ with tab2:
             try:
                 with st.spinner("Computing metrics, validating rules, and running the agent crew..."):
                     res = run_underwriting_workflow(
-                        provider=provider, api_key=api_key, program=program,
+                        api_key=api_key, program=program,
                         monthly_income=st.session_state.income, monthly_debts=st.session_state.debts,
                         loan_amount=st.session_state.loan, property_value=st.session_state.value,
                         notes=st.session_state.notes, documents=docs_to_list(st.session_state.docs_current))
