@@ -34,7 +34,7 @@ REC_SUSPEND = "Suspend - Insufficient Information"
 REC_DENY = "Consider Adverse Action / Denial"
 REC_ALL = (REC_APPROVE, REC_SUSPEND, REC_DENY)
  
-MODEL_BY_PROVIDER = {"Groq": "groq/llama-3.3-70b-versatile", "OpenAI": "openai/gpt-4o-mini"}
+GROQ_MODEL = "groq/llama-3.3-70b-versatile"
  
  
 class WorkflowError(RuntimeError):
@@ -84,13 +84,11 @@ COMPLIANCE_RULES = (
 # --------------------------------------------------------------------------- #
 # LLM + Crew construction
 # --------------------------------------------------------------------------- #
-def build_llm(provider: str, api_key: str) -> "LLM":
-    if provider not in MODEL_BY_PROVIDER:
-        raise WorkflowError(f"Unsupported provider '{provider}'.")
+def build_llm(api_key: str) -> "LLM":
     if not api_key or not api_key.strip():
-        raise WorkflowError(f"Missing {provider} API key. Add it in the sidebar or in Streamlit Secrets / .env.")
+        raise WorkflowError("Missing Groq API key. Add GROQ_API_KEY in the sidebar or in Streamlit Secrets / .env.")
     LLM, *_ = _import_crewai()
-    return LLM(model=MODEL_BY_PROVIDER[provider], api_key=api_key.strip(), temperature=0.0)
+    return LLM(model=GROQ_MODEL, api_key=api_key.strip(), temperature=0.0)
  
  
 def build_crew(llm: "LLM", verbose: bool = False):
@@ -335,7 +333,7 @@ def retrieve_citations(program: str, notes: str, thresholds: dict) -> list[dict]
 # --------------------------------------------------------------------------- #
 # Orchestrator
 # --------------------------------------------------------------------------- #
-def run_underwriting_workflow(*, provider: str, api_key: str, program: str, monthly_income, monthly_debts,
+def run_underwriting_workflow(*, api_key: str, program: str, monthly_income, monthly_debts,
                               loan_amount, property_value, notes: str, documents: list,
                               reference_date: Optional[date] = None, verbose: bool = False) -> dict:
     # 1) Deterministic layer (raises InputValidationError on bad numbers)
@@ -353,7 +351,7 @@ def run_underwriting_workflow(*, provider: str, api_key: str, program: str, mont
     if not notes_clean:
         analysis_text = policy_text = "Not run: no borrower file notes were provided (INSUFFICIENT INFORMATION)."
     else:
-        llm = build_llm(provider, api_key)
+        llm = build_llm(api_key)
         crew, t_analyze, t_policy, t_decide = build_crew(llm, verbose=verbose)
         inputs = {
             "program": program,
@@ -381,7 +379,7 @@ def run_underwriting_workflow(*, provider: str, api_key: str, program: str, mont
  
     return {
         "run_timestamp": datetime.now().isoformat(timespec="seconds"),
-        "model": MODEL_BY_PROVIDER.get(provider, provider) if notes_clean else "not invoked",
+        "model": GROQ_MODEL if notes_clean else "not invoked",
         "program": program,
         "metrics": metrics,
         "thresholds": thresholds,
