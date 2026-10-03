@@ -55,14 +55,14 @@ def test_dti_over_ceiling_never_approved():
  
  
 def test_workflow_without_notes_never_calls_llm():
-    r = agents.run_underwriting_workflow(provider="Groq", api_key="", program="VA", monthly_income=8000, monthly_debts=2000,
+    r = agents.run_underwriting_workflow(api_key="", program="VA", monthly_income=8000, monthly_debts=2000,
                                          loan_amount=300000, property_value=320000, notes="", documents=[])
     assert r["model"] == "not invoked" and r["decision"]["recommendation"] == agents.REC_SUSPEND
  
  
 def test_missing_key_gives_clean_error():
     try:
-        agents.run_underwriting_workflow(provider="Groq", api_key="", program="VA", monthly_income=8000, monthly_debts=2000,
+        agents.run_underwriting_workflow(api_key="", program="VA", monthly_income=8000, monthly_debts=2000,
                                          loan_amount=300000, property_value=320000, notes="x", documents=[])
         assert False
     except agents.WorkflowError as e:
