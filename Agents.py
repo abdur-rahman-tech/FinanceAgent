@@ -14,7 +14,6 @@ import re
 from datetime import date, datetime
 from typing import Any, List, Optional
  
-from crewai import LLM, Agent, Crew, Process, Task
 from pydantic import BaseModel, Field
  
 from tools import (
@@ -40,6 +39,17 @@ MODEL_BY_PROVIDER = {"Groq": "groq/llama-3.3-70b-versatile", "OpenAI": "openai/g
  
 class WorkflowError(RuntimeError):
     """Raised when the agentic workflow cannot complete (missing key, LLM failure...)."""
+ 
+ 
+def _import_crewai():
+    """Lazy import: the UI, math and rule validation keep working even if crewai failed to install."""
+    try:
+        from crewai import LLM, Agent, Crew, Process, Task
+        return LLM, Agent, Crew, Process, Task
+    except Exception as e:
+        raise WorkflowError(
+            f"CrewAI could not be imported ({type(e).__name__}: {e}). Check requirements.txt, the Python version "
+            "(use 3.11 or 3.12) and the sqlite3 note in README.md.") from e
  
  
 # --------------------------------------------------------------------------- #
@@ -74,15 +84,17 @@ COMPLIANCE_RULES = (
 # --------------------------------------------------------------------------- #
 # LLM + Crew construction
 # --------------------------------------------------------------------------- #
-def build_llm(provider: str, api_key: str) -> LLM:
+def build_llm(provider: str, api_key: str) -> "LLM":
     if provider not in MODEL_BY_PROVIDER:
         raise WorkflowError(f"Unsupported provider '{provider}'.")
     if not api_key or not api_key.strip():
-        raise WorkflowError(f"Missing {provider} API key. Add it in the sidebar or your .env file.")
+        raise WorkflowError(f"Missing {provider} API key. Add it in the sidebar or in Streamlit Secrets / .env.")
+    LLM, *_ = _import_crewai()
     return LLM(model=MODEL_BY_PROVIDER[provider], api_key=api_key.strip(), temperature=0.0)
  
  
-def build_crew(llm: LLM, verbose: bool = False) -> tuple[Crew, Task, Task, Task]:
+def build_crew(llm: "LLM", verbose: bool = False):
+    _, Agent, Crew, Process, Task = _import_crewai()
     analyzer = Agent(
         role="Document & Discrepancy Analyzer",
         goal="Find every cross-document mismatch, gap and stale verification in the borrower file, with evidence.",
