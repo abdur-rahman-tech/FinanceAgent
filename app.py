@@ -9,7 +9,12 @@ from datetime import date, datetime, timedelta
  
 import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
+ 
+try:  # optional: Streamlit Cloud uses Secrets/env vars instead of a .env file
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    def load_dotenv(*args, **kwargs):
+        return False
  
 from agents import REC_ALL, REC_APPROVE, REC_DENY, REC_SUSPEND, WorkflowError, run_underwriting_workflow
 from tools import PROGRAM_RULES, InputValidationError
