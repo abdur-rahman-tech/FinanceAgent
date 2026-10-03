@@ -1,0 +1,6 @@
+streamlit>=1.40.0
+crewai>=0.100.0
+litellm
+langchain-groq
+python-dotenv
+pandas
